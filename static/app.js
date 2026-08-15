@@ -83,9 +83,8 @@ function abbreviate(text, chars, preferFirstName = false) {
   if (text.length <= chars) return text;
   if (preferFirstName) {
     const firstName = text.trim().split(/\s+/)[0] || text;
-    if (firstName.length < chars) return `${firstName}…`;
-    if (firstName.length === chars) return firstName;
-    return `${firstName.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
+    if (firstName.length > chars) return '';
+    return firstName;
   }
   return `${text.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
 }
@@ -112,6 +111,7 @@ function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale
   if (!root && availablePixels < 38) return '';
   const allowed = Math.max(root ? 8 : 5, Math.floor(availablePixels / (root ? 8 : 7)));
   const shown = abbreviate(label, allowed, preferFirstName);
+  if (!shown) return '';
   const words = shown.split(' ');
   const lines = shown.length > Math.min(18, allowed) && words.length > 1
     ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
@@ -132,6 +132,7 @@ function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibl
   const availablePixels = available * visibleScale;
   if (availablePixels < 42) return '';
   const shown = abbreviate(label, Math.max(5, Math.floor(availablePixels / 7)), preferFirstName);
+  if (!shown) return '';
   const size = Math.max(.35, Math.min(15, available / Math.max(1, shown.length) / .58));
   const cap = available * .84;
   const middle = ((start + end) / 2 + 360) % 360;
@@ -188,7 +189,7 @@ function drawTree() {
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
-    const radial = slot.level >= 7;
+    const radial = slot.level >= 6;
     const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;

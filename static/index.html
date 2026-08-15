@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#426836">
+  <title>Mi Árbol Familiar</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>.content-grid.tree-only{display:block}.tree-only .tree-card{width:100%}.tree-actions{display:flex;justify-content:center;margin-top:10px}.tree-actions button{border:1px solid #d2d8ce}.delete-button{background:#ffdad6!important;color:#8c1d18!important;border:1px solid #b3261e!important}.toolbar .delete-button{margin-left:0}body.dark{background:#11140f;color:#e4e7df}body.dark .topbar,body.dark .card,body.dark .dialog{background:#1b1f19;color:#e4e7df;border-color:#3f463c}body.dark .toolbar select,body.dark .field input,body.dark .field textarea,body.dark .field select{background:#272c25;color:#e4e7df;border-color:#929a8b}body.dark .tree{background:radial-gradient(circle at center,#273024 0 9%,#1c231a 38%,#151a14 100%)}body.dark .sector-name,body.dark .sector-sub,body.dark .section-title p,body.dark .muted,body.dark .brand small{color:#e0e5da;fill:#e0e5da}body.dark .sector path{stroke:#54624e}body.dark .sector.empty path{stroke:#82917c}body.dark .sector:hover path{stroke:#c2efae}body.dark .zoom-hint,body.dark .zoom-reset{background:#282e26;color:#e4e7df;border-color:#7e8977}body.dark dl{background:#292f26}body.dark .text-button{color:#c2efae}body.dark .tree-actions button{border-color:#5f6a5a}.theme-button{min-width:154px}</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon">🌳</span><div><strong>Mi Árbol Familiar</strong><small>Recuerdos de nuestra familia</small></div></div>
+    <div><button id="themeToggle" class="text-button theme-button">Modo oscuro</button><button id="helpButton" class="text-button">Ayuda</button></div>
+  </header>
+
+  <main>
+    <section class="welcome" id="emptyState" hidden>
+      <div class="welcome-art">🌱</div>
+      <h1>Empecemos tu árbol familiar</h1>
+      <p>Añade la primera persona. Después podrás incorporar sus padres, pareja e hijos.</p>
+      <button class="primary large" data-action="new-person">Añadir primera persona</button>
+    </section>
+
+    <section id="workspace" hidden>
+      <div class="toolbar card">
+        <label for="focusPerson">Persona que quieres ver</label>
+        <select id="focusPerson"></select>
+        <button class="primary" data-action="new-person">＋ Añadir persona</button>
+        <button class="delete-button" id="deleteTreeButton">Borrar árbol</button>
+      </div>
+
+      <div class="content-grid tree-only">
+        <section class="tree-card card" aria-label="Árbol familiar circular">
+          <div class="section-title"><div><h1>Antepasados de <span id="focusName"></span></h1><p>Cada rama crece en cuanto se añaden los padres de una persona.</p></div></div>
+          <div id="tree" class="tree"></div>
+          <div class="tree-actions"><button id="removeOuterLevel" class="text-button" hidden>Quitar generación exterior</button></div>
+          <div class="legend"><span><i class="dot center"></i>Persona central</span><span><i class="dot parents"></i>Padre arriba</span><span><i class="dot grandparents"></i>Madre abajo</span></div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <div id="dialogBackdrop" class="backdrop" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <div class="dialog-header"><h2 id="dialogTitle"></h2><button class="icon-button" id="closeDialog" aria-label="Cerrar">×</button></div>
+      <div id="dialogContent"></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

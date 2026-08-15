@@ -14,6 +14,15 @@ Se abrirá automáticamente el navegador en <http://127.0.0.1:8765>. Si ese puer
 
 Los datos se guardan en `data/familia.sqlite3`. Para hacer una copia de seguridad con la aplicación cerrada, copia la carpeta `data` completa.
 
+## Llevar los datos a otro ordenador
+
+1. Cierra la aplicación en ambos equipos.
+2. Copia la carpeta `data` completa a una memoria USB o a un servicio de nube.
+3. En el equipo nuevo, coloca esa carpeta dentro de la carpeta del proyecto y sustituye su carpeta `data` si ya existe.
+4. Ejecuta `python3 app.py` normalmente.
+
+No abras ni modifiques la misma base de datos desde dos equipos a la vez. Para alternar entre equipos, usa siempre la última copia cerrada de `data` como origen.
+
 ## Funciones incluidas
 
 - Crear y editar personas con nombre, apellidos y notas.

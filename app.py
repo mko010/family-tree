@@ -45,6 +45,7 @@ def init_db() -> None:
                 death_date TEXT NOT NULL DEFAULT '',
                 birth_place TEXT NOT NULL DEFAULT '',
                 notes TEXT NOT NULL DEFAULT '',
+                is_tree_root INTEGER NOT NULL DEFAULT 0 CHECK(is_tree_root IN (0, 1)),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -63,6 +64,15 @@ def init_db() -> None:
         columns = {row[1] for row in db.execute("PRAGMA table_info(relationships)")}
         if "parent_role" not in columns:
             db.execute("ALTER TABLE relationships ADD COLUMN parent_role TEXT")
+        people_columns = {row[1] for row in db.execute("PRAGMA table_info(people)")}
+        if "is_tree_root" not in people_columns:
+            db.execute("ALTER TABLE people ADD COLUMN is_tree_root INTEGER NOT NULL DEFAULT 0")
+            db.execute(
+                """UPDATE people SET is_tree_root = 1
+                WHERE id NOT IN (
+                    SELECT relative_id FROM relationships WHERE relation_type = 'parent'
+                )"""
+            )
 
 
 def row_dict(row: sqlite3.Row) -> dict:
@@ -203,14 +213,16 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def create_person(self) -> None:
-        values = self.person_values(self.read_json())
+        data = self.read_json()
+        values = self.person_values(data)
+        is_tree_root = 1 if data.get("is_tree_root") else 0
         now = datetime.now().isoformat(timespec="seconds")
         with connect() as db:
             cursor = db.execute(
                 """INSERT INTO people
-                (first_name, last_name, birth_date, death_date, birth_place, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (*values, now, now),
+                (first_name, last_name, birth_date, death_date, birth_place, notes, is_tree_root, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (*values, is_tree_root, now, now),
             )
             person = db.execute("SELECT * FROM people WHERE id = ?", (cursor.lastrowid,)).fetchone()
         self.send_json(row_dict(person), HTTPStatus.CREATED)

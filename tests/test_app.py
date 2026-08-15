@@ -52,6 +52,11 @@ class DatabaseTests(unittest.TestCase):
             columns = {row[1] for row in db.execute("PRAGMA table_info(relationships)")}
         self.assertIn("parent_role", columns)
 
+    def test_tree_root_flag_is_available_after_initialization(self):
+        with app.connect() as db:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(people)")}
+        self.assertIn("is_tree_root", columns)
+
 
 if __name__ == "__main__":
     unittest.main()

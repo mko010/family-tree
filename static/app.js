@@ -79,7 +79,16 @@ function wedge(cx, cy, inner, outer, start, end) {
 }
 
 function roleName(role) { return role === 'father' ? 'padre' : 'madre'; }
-function abbreviate(text, chars) { return text.length <= chars ? text : `${text.slice(0, Math.max(1, chars - 1)).trimEnd()}…`; }
+function abbreviate(text, chars, preferFirstName = false) {
+  if (text.length <= chars) return text;
+  if (preferFirstName) {
+    const firstName = text.trim().split(/\s+/)[0] || text;
+    if (firstName.length < chars) return `${firstName}…`;
+    if (firstName.length === chars) return firstName;
+    return `${firstName.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
+  }
+  return `${text.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
+}
 
 function towardCenterRotation(angle) {
   // SVG text begins at its left edge. Adding 180° makes its reading axis
@@ -98,11 +107,11 @@ function tangentRotation(angle) {
   return rotation;
 }
 
-function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale, root = false, angle = null, radial = false) {
+function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale, root = false, angle = null, radial = false, preferFirstName = false) {
   const availablePixels = available * visibleScale;
   if (!root && availablePixels < 38) return '';
   const allowed = Math.max(root ? 8 : 5, Math.floor(availablePixels / (root ? 8 : 7)));
-  const shown = abbreviate(label, allowed);
+  const shown = abbreviate(label, allowed, preferFirstName);
   const words = shown.split(' ');
   const lines = shown.length > Math.min(18, allowed) && words.length > 1
     ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
@@ -119,10 +128,10 @@ function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale
   return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
 }
 
-function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibleScale, paths) {
+function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibleScale, paths, preferFirstName = false) {
   const availablePixels = available * visibleScale;
   if (availablePixels < 42) return '';
-  const shown = abbreviate(label, Math.max(5, Math.floor(availablePixels / 7)));
+  const shown = abbreviate(label, Math.max(5, Math.floor(availablePixels / 7)), preferFirstName);
   const size = Math.max(.35, Math.min(15, available / Math.max(1, shown.length) / .58));
   const cap = available * .84;
   const middle = ((start + end) / 2 + 360) % 360;
@@ -179,18 +188,18 @@ function drawTree() {
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
-    const radial = slot.level >= 6;
+    const radial = slot.level >= 7;
     const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';
     const text = radial
-      ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true)
-      : curvedLabelSvg(`curve-${slot.path || 'root'}`, cx, cy, mean, start + 4, end - 4, label, available, visualScale, curvePaths);
+      ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true, Boolean(slot.person))
+      : curvedLabelSvg(`curve-${slot.path || 'root'}`, cx, cy, mean, start + 4, end - 4, label, available, visualScale, curvePaths, Boolean(slot.person));
     return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${text}</g>`;
   }).join('');
   const view = state.view;
-  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
+  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true, null, false, true)}</g></g></svg>`;
   const activate = element => {
     const sector = element.closest('.sector');
     if (sector) {

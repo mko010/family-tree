@@ -313,6 +313,7 @@ function exportTreeSvg() {
   const source = $('#treeSvg');
   if (!source) return;
   const copy = source.cloneNode(true), dark = document.body.classList.contains('dark');
+  copy.querySelectorAll('.sector.empty').forEach(sector => sector.remove());
   const view = source.dataset.generalView;
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   copy.setAttribute('viewBox', view);

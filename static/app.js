@@ -128,7 +128,7 @@ function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale
   const subtitleSize = Math.max(.18, Math.min(12, size * .72));
   const transform = angle === null ? '' : ` transform="rotate(${radial ? towardCenterRotation(angle) : tangentRotation(angle)} ${x} ${y})"`;
   const cap = available * .88;
-  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${!radial && subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
+  return `<text x="${x}" y="${start}"${transform} text-anchor="middle" class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${!radial && subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} text-anchor="middle" class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
 }
 
 function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibleScale, paths, preferFirstName = false) {

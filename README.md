@@ -40,6 +40,7 @@ No abras ni modifiques la misma base de datos desde dos equipos a la vez. Para a
 - Generaciones que se añaden automáticamente al completar el anillo anterior, sin límite fijo.
 - Zoom con la rueda del ratón y desplazamiento arrastrando el árbol.
 - Quitar la generación exterior para corregir el árbol sin perder las fichas de las personas.
+- Exportar el árbol completo a SVG, un formato vectorial ampliable sin pérdida de calidad.
 - Guardado local automático en SQLite.
 - Diseño adaptable a ordenador y tableta.
 

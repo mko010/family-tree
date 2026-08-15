@@ -1,4 +1,4 @@
-const state = {people: [], relationships: [], roots: [], focusId: null, view: null, treeSide: 0};
+const state = {people: [], relationships: [], roots: [], focusId: null, view: null, treeSide: 0, rotation: 0};
 const $ = selector => document.querySelector(selector);
 const esc = (value = '') => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const personById = id => state.people.find(person => person.id === Number(id));
@@ -128,7 +128,7 @@ function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibl
   const middle = ((start + end) / 2 + 360) % 360;
   // Keep labels readable in every quadrant. The top-right arc needs the
   // same reversed path direction as the lower semicircle.
-  const reverse = middle < 180 || middle > 270;
+  const reverse = middle < 180;
   const pathStart = reverse ? end : start, pathEnd = reverse ? start : end, sweep = reverse ? 0 : 1;
   const [x1, y1] = polar(cx, cy, radius, pathStart), [x2, y2] = polar(cx, cy, radius, pathEnd);
   paths.push(`<path id="${id}" d="M${x1},${y1} A${radius},${radius} 0 0 ${sweep} ${x2},${y2}"/>`);
@@ -145,7 +145,7 @@ function generalViewFor(slots, cx, cy, centerRadius, step) {
   let minX = cx - centerRadius, maxX = cx + centerRadius, minY = cy - centerRadius, maxY = cy + centerRadius;
   for (const slot of slots.filter(item => item.level)) {
     const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
-    const start = -180 + index * span, end = start + span;
+    const start = -180 + index * span + state.rotation, end = start + span;
     const outer = centerRadius + slot.level * step - 4;
     const angles = [start, end, -180, -90, 0, 90, 180].filter(angle => angle >= start && angle <= end);
     angles.forEach(angle => {
@@ -154,7 +154,7 @@ function generalViewFor(slots, cx, cy, centerRadius, step) {
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     });
   }
-  const padding = 75, size = Math.max(maxX - minX, maxY - minY) + padding * 2;
+  const padding = 24, size = Math.max(maxX - minX, maxY - minY) + padding * 2;
   return {x: (minX + maxX - size) / 2, y: (minY + maxY - size) / 2, size};
 }
 
@@ -175,11 +175,11 @@ function drawTree() {
   const curvePaths = [];
   const sectors = slots.filter(slot => slot.level).map(slot => {
     const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
-    const start = -180 + index * span, end = start + span;
+    const start = -180 + index * span + state.rotation, end = start + span;
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
-    const radial = slot.level >= 5;
+    const radial = slot.level >= 6;
     const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
@@ -190,7 +190,7 @@ function drawTree() {
     return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${text}</g>`;
   }).join('');
   const view = state.view;
-  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover</div><button id="resetZoom" class="zoom-reset">Vista completa</button><svg id="treeSvg" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
+  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
   const activate = element => {
     const sector = element.closest('.sector');
     if (sector) {
@@ -199,6 +199,8 @@ function drawTree() {
     } else if (element.closest('.root-node')) openEditor(root);
   };
   $('#resetZoom').onclick = () => { resetView(generalView, root.id); drawTree(); };
+  $('#rotateLeft').onclick = () => { state.rotation -= 15; drawTree(); };
+  $('#rotateRight').onclick = () => { state.rotation += 15; drawTree(); };
   bindViewport(activate, generalView.size);
   const lastLevel = Math.max(...slots.filter(slot => slot.person).map(slot => slot.level));
   const removeButton = $('#removeOuterLevel');
@@ -231,11 +233,17 @@ function bindViewport(activate, side) {
     scheduleRedraw();
   }, {passive: false});
   svg.addEventListener('pointerdown', event => {
-    drag = {x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, target: event.target};
+    drag = {x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, target: event.target, rotating: event.shiftKey};
     svg.setPointerCapture(event.pointerId);
   });
   svg.addEventListener('pointermove', event => {
     if (!drag) return;
+    if (drag.rotating) {
+      state.rotation += (event.clientX - drag.x) * .35;
+      drag.x = event.clientX; drag.y = event.clientY;
+      scheduleRedraw();
+      return;
+    }
     const box = svg.getBoundingClientRect();
     state.view.x -= (event.clientX - drag.x) / box.width * state.view.size;
     state.view.y -= (event.clientY - drag.y) / box.height * state.view.size;
@@ -243,7 +251,7 @@ function bindViewport(activate, side) {
     updateViewBox();
   });
   svg.addEventListener('pointerup', event => {
-    if (drag && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) activate(drag.target);
+    if (drag && !drag.rotating && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) activate(drag.target);
     drag = null;
   });
   svg.addEventListener('pointercancel', () => drag = null);
@@ -301,6 +309,26 @@ async function removeOuterLevel(slots, level) {
 }
 
 function toast(message) { const element = $('#toast'); element.textContent = message; element.hidden = false; clearTimeout(element.timer); element.timer = setTimeout(() => element.hidden = true, 2800); }
+function exportTreeSvg() {
+  const source = $('#treeSvg');
+  if (!source) return;
+  const copy = source.cloneNode(true), dark = document.body.classList.contains('dark');
+  const view = source.dataset.generalView;
+  copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  copy.setAttribute('viewBox', view);
+  copy.setAttribute('width', '1800'); copy.setAttribute('height', '1800');
+  const [x, y, width, height] = view.split(' ');
+  const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  background.setAttribute('x', x); background.setAttribute('y', y); background.setAttribute('width', width); background.setAttribute('height', height); background.setAttribute('fill', dark ? '#11140f' : '#fbfdf6');
+  const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  style.textContent = `.sector path{stroke:${dark ? '#54624e' : '#ffffff'};stroke-width:3;vector-effect:non-scaling-stroke}.sector.empty path{stroke-dasharray:6 4}.sector-name{font-family:Arial,sans-serif;font-weight:700;fill:${dark ? '#e0e5da' : '#263426'};text-anchor:middle}.sector-sub{font-family:Arial,sans-serif;fill:${dark ? '#e0e5da' : '#536052'};text-anchor:middle}.root-node circle{fill:#426836;stroke:#fff;stroke-width:5;vector-effect:non-scaling-stroke}.root-node text{font-family:Arial,sans-serif;font-weight:700;fill:#fff;text-anchor:middle}`;
+  copy.insertBefore(style, copy.firstChild); copy.insertBefore(background, copy.firstChild);
+  const blob = new Blob([new XMLSerializer().serializeToString(copy)], {type: 'image/svg+xml;charset=utf-8'});
+  const link = document.createElement('a'), url = URL.createObjectURL(blob);
+  link.href = url; link.download = `arbol-${fullName(personById(state.focusId)).replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'familiar'}.svg`;
+  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  toast('Árbol exportado en formato SVG');
+}
 function setTheme(dark) {
   document.body.classList.toggle('dark', dark);
   $('#themeToggle').textContent = dark ? 'Modo claro' : 'Modo oscuro';
@@ -316,6 +344,7 @@ keepLocalAppAlive();
 setInterval(keepLocalAppAlive, 3000);
 $('#themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
 document.querySelectorAll('[data-action="new-person"]').forEach(button => button.onclick = newTree);
+$('#exportTreeButton').onclick = exportTreeSvg;
 $('#focusPerson').onchange = event => { state.focusId = Number(event.target.value); state.view = null; render(); };
 $('#deleteTreeButton').onclick = async () => {
   const root = personById(state.focusId);

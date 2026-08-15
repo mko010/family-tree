@@ -3,6 +3,10 @@ const $ = selector => document.querySelector(selector);
 const esc = (value = '') => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const personById = id => state.people.find(person => person.id === Number(id));
 const fullName = person => `${person.first_name} ${person.last_name}`.trim();
+const treeLabel = person => {
+  const initials = person.last_name.trim().split(/\s+/).filter(Boolean).map(part => `${part[0].toUpperCase()}.`).join(' ');
+  return `${person.first_name}${initials ? ` ${initials}` : ''}`;
+};
 const years = person => [person.birth_date?.slice(0, 4), person.death_date?.slice(0, 4)].filter(Boolean).join(' – ');
 
 async function api(path, options = {}) {
@@ -83,7 +87,6 @@ function abbreviate(text, chars, preferFirstName = false) {
   if (text.length <= chars) return text;
   if (preferFirstName) {
     const firstName = text.trim().split(/\s+/)[0] || text;
-    if (firstName.length > chars) return '';
     return firstName;
   }
   return `${text.slice(0, Math.max(1, chars - 1)).trimEnd()}…`;
@@ -113,19 +116,19 @@ function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale
   const shown = abbreviate(label, allowed, preferFirstName);
   if (!shown) return '';
   const words = shown.split(' ');
-  const lines = shown.length > Math.min(18, allowed) && words.length > 1
+  const lines = radial ? [shown] : shown.length > Math.min(18, allowed) && words.length > 1
     ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
     : [shown];
   const longest = Math.max(...lines.map(line => line.length));
   // At deep levels the available SVG arc is tiny.  The font must be allowed
   // to be tiny in SVG units so that it becomes readable only after zooming.
   const size = Math.max(root ? 5 : .25, Math.min(root ? 16 : 15, available / Math.max(1, longest) / .58, crossAvailable / (lines.length * 1.45)));
-  const start = y - (lines.length === 2 ? size * .58 : size * .18);
+  const start = radial ? y + size * .34 : y - (lines.length === 2 ? size * .58 : size * .18);
   const subtitleY = y + (lines.length === 2 ? size * 1.65 : size * 1.05);
   const subtitleSize = Math.max(.18, Math.min(12, size * .72));
   const transform = angle === null ? '' : ` transform="rotate(${radial ? towardCenterRotation(angle) : tangentRotation(angle)} ${x} ${y})"`;
   const cap = available * .88;
-  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
+  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${!radial && subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
 }
 
 function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibleScale, paths, preferFirstName = false) {
@@ -193,7 +196,7 @@ function drawTree() {
     const radial = slot.level >= 6;
     const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
-    const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
+    const label = slot.person ? treeLabel(slot.person) : `Añadir ${roleName(slot.role)}`;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';
     const text = radial
       ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true, Boolean(slot.person))
@@ -202,7 +205,7 @@ function drawTree() {
     sectorLabels.push(text ? `<g data-path="${slot.path}">${text}</g>` : '');
   });
   const view = state.view;
-  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectorPaths.join('')}<g class="label-layer" pointer-events="none">${sectorLabels.join('')}</g><g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true, null, false, true)}</g></g></svg>`;
+  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectorPaths.join('')}<g class="label-layer" pointer-events="none">${sectorLabels.join('')}</g><g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, treeLabel(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true, null, false, true)}</g></g></svg>`;
   const activate = element => {
     const sector = element.closest('.sector');
     if (sector) {

@@ -183,7 +183,8 @@ function drawTree() {
   const emptyFill = dark ? '#2a3228' : '#f1f3ee';
   const visualScale = ($('#tree')?.clientWidth || 900) / state.view.size;
   const curvePaths = [];
-  const sectors = slots.filter(slot => slot.level).map(slot => {
+  const sectorPaths = [], sectorLabels = [];
+  slots.filter(slot => slot.level).forEach(slot => {
     const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
     const start = -180 + index * span + state.rotation, end = start + span;
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
@@ -197,10 +198,11 @@ function drawTree() {
     const text = radial
       ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true, Boolean(slot.person))
       : curvedLabelSvg(`curve-${slot.path || 'root'}`, cx, cy, mean, start + 4, end - 4, label, available, visualScale, curvePaths, Boolean(slot.person));
-    return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${text}</g>`;
-  }).join('');
+    sectorPaths.push(`<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/></g>`);
+    sectorLabels.push(text ? `<g data-path="${slot.path}">${text}</g>` : '');
+  });
   const view = state.view;
-  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true, null, false, true)}</g></g></svg>`;
+  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover · Shift + arrastrar: girar</div><div class="tree-view-controls"><button id="rotateLeft" class="zoom-reset" aria-label="Girar a la izquierda">↺ Girar</button><button id="resetZoom" class="zoom-reset">Vista completa</button><button id="rotateRight" class="zoom-reset" aria-label="Girar a la derecha">Girar ↻</button></div><svg id="treeSvg" data-general-view="${generalView.x} ${generalView.y} ${generalView.size} ${generalView.size}" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectorPaths.join('')}<g class="label-layer" pointer-events="none">${sectorLabels.join('')}</g><g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true, null, false, true)}</g></g></svg>`;
   const activate = element => {
     const sector = element.closest('.sector');
     if (sector) {
@@ -323,7 +325,9 @@ function exportTreeSvg() {
   const source = $('#treeSvg');
   if (!source) return;
   const copy = source.cloneNode(true), dark = document.body.classList.contains('dark');
+  const emptyPaths = new Set([...copy.querySelectorAll('.sector.empty')].map(sector => sector.dataset.path));
   copy.querySelectorAll('.sector.empty').forEach(sector => sector.remove());
+  copy.querySelectorAll('.label-layer [data-path]').forEach(label => { if (emptyPaths.has(label.dataset.path)) label.remove(); });
   const view = source.dataset.generalView;
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   copy.setAttribute('viewBox', view);

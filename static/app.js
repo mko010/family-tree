@@ -87,7 +87,14 @@ function towardCenterRotation(angle) {
   return angle + 180;
 }
 
-function labelSvg(x, y, label, subtitle, available, visibleScale, root = false, angle = null) {
+function tangentRotation(angle) {
+  let rotation = ((angle + 90 + 540) % 360) - 180;
+  if (rotation > 90) rotation -= 180;
+  if (rotation < -90) rotation += 180;
+  return rotation;
+}
+
+function labelSvg(x, y, label, subtitle, available, crossAvailable, visibleScale, root = false, angle = null, radial = false) {
   const availablePixels = available * visibleScale;
   if (!root && availablePixels < 38) return '';
   const allowed = Math.max(root ? 8 : 5, Math.floor(availablePixels / (root ? 8 : 7)));
@@ -99,12 +106,28 @@ function labelSvg(x, y, label, subtitle, available, visibleScale, root = false, 
   const longest = Math.max(...lines.map(line => line.length));
   // At deep levels the available SVG arc is tiny.  The font must be allowed
   // to be tiny in SVG units so that it becomes readable only after zooming.
-  const size = Math.max(root ? 5 : .25, Math.min(root ? 16 : 15, available / Math.max(1, longest) / .58));
+  const size = Math.max(root ? 5 : .25, Math.min(root ? 16 : 15, available / Math.max(1, longest) / .58, crossAvailable / (lines.length * 1.45)));
   const start = y - (lines.length === 2 ? size * .58 : size * .18);
   const subtitleY = y + (lines.length === 2 ? size * 1.65 : size * 1.05);
   const subtitleSize = Math.max(.18, Math.min(12, size * .72));
-  const transform = angle === null ? '' : ` transform="rotate(${towardCenterRotation(angle)} ${x} ${y})"`;
-  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => `<tspan x="${x}" dy="${index ? size * 1.03 : 0}">${esc(line)}</tspan>`).join('')}</text>${subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
+  const transform = angle === null ? '' : ` transform="rotate(${radial ? towardCenterRotation(angle) : tangentRotation(angle)} ${x} ${y})"`;
+  const cap = available * .88;
+  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => { const natural = line.length * size * .58; const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : ''; return `<tspan x="${x}" dy="${index ? size * 1.03 : 0}"${fit}>${esc(line)}</tspan>`; }).join('')}</text>${subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
+}
+
+function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibleScale, paths) {
+  const availablePixels = available * visibleScale;
+  if (availablePixels < 42) return '';
+  const shown = abbreviate(label, Math.max(5, Math.floor(availablePixels / 7)));
+  const size = Math.max(.35, Math.min(15, available / Math.max(1, shown.length) / .58));
+  const cap = available * .84;
+  const reverse = ((start + end) / 2 + 360) % 360 < 180;
+  const pathStart = reverse ? end : start, pathEnd = reverse ? start : end, sweep = reverse ? 0 : 1;
+  const [x1, y1] = polar(cx, cy, radius, pathStart), [x2, y2] = polar(cx, cy, radius, pathEnd);
+  paths.push(`<path id="${id}" d="M${x1},${y1} A${radius},${radius} 0 0 ${sweep} ${x2},${y2}"/>`);
+  const natural = shown.length * size * .58;
+  const fit = natural > cap ? ` textLength="${cap}" lengthAdjust="spacingAndGlyphs"` : '';
+  return `<text class="sector-name" style="font-size:${size}px"><textPath href="#${id}" startOffset="50%" text-anchor="middle"${fit}>${esc(shown)}</textPath></text>`;
 }
 
 function resetView(side, rootId) {
@@ -122,18 +145,25 @@ function drawTree() {
   const palette = dark ? ['#355b2d','#416b36','#4d7a41','#58884b','#639655'] : ['#c2efae','#d8edcc','#e8f4df','#f1f7ec','#f6faf3'];
   const emptyFill = dark ? '#2a3228' : '#f1f3ee';
   const visualScale = ($('#tree')?.clientWidth || 900) / state.view.size;
+  const curvePaths = [];
   const sectors = slots.filter(slot => slot.level).map(slot => {
     const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
     const start = -180 + index * span, end = start + span;
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
-    const available = Math.max(2, mean * (span * Math.PI / 180) * .85);
+    const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
+    const radial = slot.level > 3;
+    const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
+    const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';
-    return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${labelSvg(x, y, label, sub, available, visualScale, false, middleAngle)}</g>`;
+    const text = radial
+      ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true)
+      : curvedLabelSvg(`curve-${slot.path || 'root'}`, cx, cy, mean, start + 4, end - 4, label, available, visualScale, curvePaths);
+    return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${text}</g>`;
   }).join('');
   const view = state.view;
-  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover</div><button id="resetZoom" class="zoom-reset">Vista completa</button><svg id="treeSvg" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
+  $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover</div><button id="resetZoom" class="zoom-reset">Vista completa</button><svg id="treeSvg" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><defs>${curvePaths.join('')}</defs><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
   const activate = element => {
     const sector = element.closest('.sector');
     if (sector) {

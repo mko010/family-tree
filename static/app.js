@@ -83,7 +83,11 @@ function abbreviate(text, chars) { return text.length <= chars ? text : `${text.
 
 function towardCenterRotation(angle) {
   // SVG text begins at its left edge. Adding 180° makes its reading axis
-  // point from the outer ring toward the centre of the tree.
+  // point from the outer ring toward the centre of the tree. In the lower
+  // right quadrant that direction would turn the glyphs upside down, so use
+  // the opposite radial direction there to preserve readable text.
+  const normalized = ((angle % 360) + 360) % 360;
+  if (normalized > 0 && normalized < 90) return angle;
   return angle + 180;
 }
 

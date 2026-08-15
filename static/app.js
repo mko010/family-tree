@@ -81,9 +81,15 @@ function wedge(cx, cy, inner, outer, start, end) {
 function roleName(role) { return role === 'father' ? 'padre' : 'madre'; }
 function abbreviate(text, chars) { return text.length <= chars ? text : `${text.slice(0, Math.max(1, chars - 1)).trimEnd()}…`; }
 
-function labelSvg(x, y, label, subtitle, available, visibleScale, root = false) {
+function towardCenterRotation(angle) {
+  // SVG text begins at its left edge. Adding 180° makes its reading axis
+  // point from the outer ring toward the centre of the tree.
+  return angle + 180;
+}
+
+function labelSvg(x, y, label, subtitle, available, visibleScale, root = false, angle = null) {
   const availablePixels = available * visibleScale;
-  if (!root && availablePixels < 46) return '';
+  if (!root && availablePixels < 38) return '';
   const allowed = Math.max(root ? 8 : 5, Math.floor(availablePixels / (root ? 8 : 7)));
   const shown = abbreviate(label, allowed);
   const words = shown.split(' ');
@@ -91,10 +97,14 @@ function labelSvg(x, y, label, subtitle, available, visibleScale, root = false) 
     ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
     : [shown];
   const longest = Math.max(...lines.map(line => line.length));
-  const size = Math.max(5, Math.min(root ? 16 : 15, available / Math.max(1, longest) / .58));
+  // At deep levels the available SVG arc is tiny.  The font must be allowed
+  // to be tiny in SVG units so that it becomes readable only after zooming.
+  const size = Math.max(root ? 5 : .25, Math.min(root ? 16 : 15, available / Math.max(1, longest) / .58));
   const start = y - (lines.length === 2 ? size * .58 : size * .18);
   const subtitleY = y + (lines.length === 2 ? size * 1.65 : size * 1.05);
-  return `<text x="${x}" y="${start}" class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => `<tspan x="${x}" dy="${index ? size * 1.03 : 0}">${esc(line)}</tspan>`).join('')}</text>${subtitle && availablePixels > 74 ? `<text x="${x}" y="${subtitleY}" class="sector-sub">${esc(subtitle)}</text>` : ''}`;
+  const subtitleSize = Math.max(.18, Math.min(12, size * .72));
+  const transform = angle === null ? '' : ` transform="rotate(${towardCenterRotation(angle)} ${x} ${y})"`;
+  return `<text x="${x}" y="${start}"${transform} class="${root ? 'root-name' : 'sector-name'}" style="font-size:${size}px">${lines.map((line, index) => `<tspan x="${x}" dy="${index ? size * 1.03 : 0}">${esc(line)}</tspan>`).join('')}</text>${subtitle && availablePixels > 96 ? `<text x="${x}" y="${subtitleY}"${transform} class="sector-sub" style="font-size:${subtitleSize}px">${esc(subtitle)}</text>` : ''}`;
 }
 
 function resetView(side, rootId) {
@@ -116,11 +126,11 @@ function drawTree() {
     const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
     const start = -180 + index * span, end = start + span;
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
-    const mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, (start + end) / 2);
-    const available = Math.max(20, mean * (span * Math.PI / 180) - 16);
+    const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
+    const available = Math.max(2, mean * (span * Math.PI / 180) * .85);
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';
-    return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${labelSvg(x, y, label, sub, available, visualScale)}</g>`;
+    return `<g class="sector ${slot.person ? 'filled' : 'empty'}" data-path="${slot.path}"><path d="${wedge(cx, cy, inner, outerRadius, start, end)}" fill="${slot.person ? palette[Math.min(slot.level - 1, palette.length - 1)] : emptyFill}"/>${labelSvg(x, y, label, sub, available, visualScale, false, middleAngle)}</g>`;
   }).join('');
   const view = state.view;
   $('#tree').innerHTML = `<div class="zoom-hint">Rueda: ampliar · Arrastrar: mover</div><button id="resetZoom" class="zoom-reset">Vista completa</button><svg id="treeSvg" viewBox="${view.x} ${view.y} ${view.size} ${view.size}" aria-label="Árbol circular de antepasados"><g>${sectors}<g class="root-node"><circle cx="${cx}" cy="${cy}" r="${centerRadius}"/>${labelSvg(cx, cy, fullName(root), years(root), centerRadius * 1.7, visualScale, true)}</g></g></svg>`;
@@ -156,7 +166,8 @@ function bindViewport(activate, side) {
     const box = svg.getBoundingClientRect();
     const x = state.view.x + (event.clientX - box.left) / box.width * state.view.size;
     const y = state.view.y + (event.clientY - box.top) / box.height * state.view.size;
-    const nextSize = Math.max(24, Math.min(side * 1.25, state.view.size * (event.deltaY < 0 ? .78 : 1.28)));
+    const wheelFactor = Math.min(1.07, Math.max(.94, Math.exp(event.deltaY * .001)));
+    const nextSize = Math.max(24, Math.min(side * 1.25, state.view.size * wheelFactor));
     state.view.x = x - (x - state.view.x) * nextSize / state.view.size;
     state.view.y = y - (y - state.view.y) * nextSize / state.view.size;
     state.view.size = nextSize;

@@ -195,10 +195,23 @@ function drawTree() {
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
     const label = slot.person ? treeLabel(slot.person) : `Añadir ${roleName(slot.role)}`;
     const radialAvailable = (outerRadius - inner) * .78;
-    const radialFontPixels = Math.min(15, radialAvailable / Math.max(1, label.length) / .58, arcAvailable / 1.45) * visualScale;
-    // Deep sectors switch back to the curved format whenever radial text
-    // would make the person's name too small at the current zoom level.
-    const radial = slot.level >= 6 && radialFontPixels >= 10;
+    // Decide the orientation from the part that matters most: the given
+    // name.  The decision is deliberately made in screen pixels, so it is
+    // recalculated after every zoom.  At close range a radial label can be
+    // clearer even in a ring where the curved label was preferable when the
+    // whole tree was visible.
+    const priorityLabel = slot.person
+      ? (slot.person.first_name.trim() || label)
+      : label;
+    const radialNamePixels = Math.min(15, radialAvailable / Math.max(1, priorityLabel.length) / .58, arcAvailable / 1.45) * visualScale;
+    const curvedNamePixels = Math.min(15, arcAvailable / Math.max(1, priorityLabel.length) / .58) * visualScale;
+    // The fifth ring is included as well: it is the first purple ring and
+    // can otherwise have more space for the name in its radial direction.
+    // Use a slight preference for the curved layout at overview scale, but
+    // switch as soon as radial text is genuinely readable.
+    const radial = slot.level >= 5
+      && radialNamePixels >= 10
+      && radialNamePixels >= curvedNamePixels * .82;
     const available = radial ? radialAvailable : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';

@@ -10,7 +10,15 @@ Se necesita Python 3.10 o posterior.
 python3 app.py
 ```
 
-Se abrirá automáticamente el navegador en <http://127.0.0.1:8765>. Si ese puerto está ocupado, la aplicación elegirá automáticamente otro puerto local y mostrará la dirección correcta en la terminal. Para detenerla, vuelve a la terminal y pulsa `Ctrl+C`.
+La aplicación se iniciará en segundo plano y abrirá automáticamente el navegador. Si ese puerto está ocupado, elegirá otro puerto local disponible. No hace falta mantener la terminal abierta.
+
+Al cerrar el navegador, la aplicación se detiene automáticamente tras unos segundos. Ese margen permite recargar la página sin que se cierre.
+
+Para cerrarla después:
+
+```bash
+python3 app.py --stop
+```
 
 Los datos se guardan en `data/familia.sqlite3`. Para hacer una copia de seguridad con la aplicación cerrada, copia la carpeta `data` completa.
 

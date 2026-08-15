@@ -7,8 +7,12 @@ import json
 import mimetypes
 import os
 import errno
+import signal
 import sqlite3
+import subprocess
+import sys
 import threading
+import time
 import webbrowser
 from datetime import datetime
 from http import HTTPStatus
@@ -21,6 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = Path(os.environ.get("ARBOL_DATA_DIR", BASE_DIR / "data"))
 DB_PATH = DATA_DIR / "familia.sqlite3"
+PID_PATH = DATA_DIR / "mi-arbol-familiar.pid"
+LOG_PATH = DATA_DIR / "mi-arbol-familiar.log"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ARBOL_PORT", "8765"))
 
@@ -31,6 +37,47 @@ def connect() -> sqlite3.Connection:
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
     return db
+
+
+def running_process_id() -> int | None:
+    """Return the stored PID only when that process is still alive."""
+    try:
+        pid = int(PID_PATH.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError):
+        PID_PATH.unlink(missing_ok=True)
+        return None
+
+
+def start_in_background() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if running_process_id():
+        print("Mi Árbol Familiar ya está en ejecución. Revisa el navegador.")
+        return
+    environment = os.environ.copy()
+    environment["ARBOL_FOREGROUND"] = "1"
+    with LOG_PATH.open("a", encoding="utf-8") as log_file:
+        subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve())],
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env=environment,
+        )
+    print("Mi Árbol Familiar se ha iniciado en segundo plano y abrirá el navegador.")
+    print("Para cerrarlo más tarde, ejecuta: python3 app.py --stop")
+
+
+def stop_background_process() -> None:
+    pid = running_process_id()
+    if not pid:
+        print("Mi Árbol Familiar no está en ejecución.")
+        return
+    os.kill(pid, signal.SIGTERM)
+    PID_PATH.unlink(missing_ok=True)
+    print("Mi Árbol Familiar se ha cerrado.")
 
 
 def init_db() -> None:
@@ -124,6 +171,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         try:
             path = urlparse(self.path).path
+            if path == "/api/heartbeat":
+                self.server.last_client_ping = time.monotonic()
+                return self.send_json({"ok": True})
             if path == "/api/people":
                 return self.create_person()
             if path == "/api/relationships":
@@ -306,6 +356,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    if "--stop" in sys.argv:
+        stop_background_process()
+        return
+    if os.environ.get("ARBOL_FOREGROUND") != "1":
+        start_in_background()
+        return
     init_db()
     server = None
     active_port = PORT
@@ -323,6 +379,18 @@ def main() -> None:
             "Cierra otras instancias de Mi Árbol Familiar e inténtalo de nuevo."
         )
     url = f"http://{HOST}:{active_port}"
+    PID_PATH.write_text(str(os.getpid()))
+    server.last_client_ping = time.monotonic()
+
+    def stop_when_browser_closes() -> None:
+        while True:
+            time.sleep(2)
+            if time.monotonic() - server.last_client_ping > 10:
+                print("Navegador cerrado: Mi Árbol Familiar se detendrá.")
+                server.shutdown()
+                return
+
+    threading.Thread(target=stop_when_browser_closes, daemon=True).start()
     print(f"Mi Árbol Familiar está disponible en {url}")
     if os.environ.get("ARBOL_NO_BROWSER") != "1":
         threading.Timer(0.7, lambda: webbrowser.open(url)).start()
@@ -332,6 +400,8 @@ def main() -> None:
         print("\nAplicación cerrada")
     finally:
         server.server_close()
+        if running_process_id() == os.getpid():
+            PID_PATH.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -121,7 +121,10 @@ function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibl
   const shown = abbreviate(label, Math.max(5, Math.floor(availablePixels / 7)));
   const size = Math.max(.35, Math.min(15, available / Math.max(1, shown.length) / .58));
   const cap = available * .84;
-  const reverse = ((start + end) / 2 + 360) % 360 < 180;
+  const middle = ((start + end) / 2 + 360) % 360;
+  // Keep labels readable in every quadrant. The top-right arc needs the
+  // same reversed path direction as the lower semicircle.
+  const reverse = middle < 180 || middle > 270;
   const pathStart = reverse ? end : start, pathEnd = reverse ? start : end, sweep = reverse ? 0 : 1;
   const [x1, y1] = polar(cx, cy, radius, pathStart), [x2, y2] = polar(cx, cy, radius, pathEnd);
   paths.push(`<path id="${id}" d="M${x1},${y1} A${radius},${radius} 0 0 ${sweep} ${x2},${y2}"/>`);
@@ -142,7 +145,9 @@ function drawTree() {
   if (!state.view || state.view.rootId !== root.id) resetView(side, root.id);
   state.treeSide = side;
   const dark = document.body.classList.contains('dark');
-  const palette = dark ? ['#355b2d','#416b36','#4d7a41','#58884b','#639655'] : ['#c2efae','#d8edcc','#e8f4df','#f1f7ec','#f6faf3'];
+  const palette = dark
+    ? ['#355b2d','#416b36','#27626b','#355a85','#58477a','#75466f','#805438','#7a672a','#475f38','#375f57','#514f7c','#734f52']
+    : ['#c2efae','#bde8c4','#b7e9e8','#c7dcff','#ded2ff','#f2cef0','#ffd7b6','#f5e59e','#d6e9b6','#bfe5dc','#d5d2ff','#f1cbd1'];
   const emptyFill = dark ? '#2a3228' : '#f1f3ee';
   const visualScale = ($('#tree')?.clientWidth || 900) / state.view.size;
   const curvePaths = [];
@@ -284,6 +289,9 @@ function setTheme(dark) {
 
 const savedTheme = localStorage.getItem('arbol-theme');
 setTheme(savedTheme ? savedTheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
+function keepLocalAppAlive() { fetch('/api/heartbeat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {}); }
+keepLocalAppAlive();
+setInterval(keepLocalAppAlive, 3000);
 $('#themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
 document.querySelectorAll('[data-action="new-person"]').forEach(button => button.onclick = newTree);
 $('#focusPerson').onchange = event => { state.focusId = Number(event.target.value); state.view = null; render(); };

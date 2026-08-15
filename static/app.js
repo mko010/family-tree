@@ -193,10 +193,14 @@ function drawTree() {
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
-    const radial = slot.level >= 6;
-    const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
-    const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? treeLabel(slot.person) : `Añadir ${roleName(slot.role)}`;
+    const radialAvailable = (outerRadius - inner) * .78;
+    const radialFontPixels = Math.min(15, radialAvailable / Math.max(1, label.length) / .58, arcAvailable / 1.45) * visualScale;
+    // Deep sectors switch back to the curved format whenever radial text
+    // would make the person's name too small at the current zoom level.
+    const radial = slot.level >= 6 && radialFontPixels >= 10;
+    const available = radial ? radialAvailable : arcAvailable;
+    const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const sub = slot.person ? years(slot.person) : 'Pulsa aquí';
     const text = radial
       ? labelSvg(x, y, label, sub, available, crossAvailable, visualScale, false, middleAngle, true, Boolean(slot.person))

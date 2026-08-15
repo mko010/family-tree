@@ -87,7 +87,7 @@ function towardCenterRotation(angle) {
   // right quadrant that direction would turn the glyphs upside down, so use
   // the opposite radial direction there to preserve readable text.
   const normalized = ((angle % 360) + 360) % 360;
-  if (normalized > 0 && normalized < 90) return angle;
+  if (normalized > 0 && normalized < 90 || normalized > 270) return angle;
   return angle + 180;
 }
 
@@ -137,8 +137,25 @@ function curvedLabelSvg(id, cx, cy, radius, start, end, label, available, visibl
   return `<text class="sector-name" style="font-size:${size}px"><textPath href="#${id}" startOffset="50%" text-anchor="middle"${fit}>${esc(shown)}</textPath></text>`;
 }
 
-function resetView(side, rootId) {
-  state.view = {x: 0, y: 0, size: side, rootId};
+function resetView(view, rootId) {
+  state.view = {...view, rootId};
+}
+
+function generalViewFor(slots, cx, cy, centerRadius, step) {
+  let minX = cx - centerRadius, maxX = cx + centerRadius, minY = cy - centerRadius, maxY = cy + centerRadius;
+  for (const slot of slots.filter(item => item.level)) {
+    const count = 2 ** slot.level, index = parseInt(slot.path, 2), span = 360 / count;
+    const start = -180 + index * span, end = start + span;
+    const outer = centerRadius + slot.level * step - 4;
+    const angles = [start, end, -180, -90, 0, 90, 180].filter(angle => angle >= start && angle <= end);
+    angles.forEach(angle => {
+      const [x, y] = polar(cx, cy, outer, angle);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    });
+  }
+  const padding = 75, size = Math.max(maxX - minX, maxY - minY) + padding * 2;
+  return {x: (minX + maxX - size) / 2, y: (minY + maxY - size) / 2, size};
 }
 
 function drawTree() {
@@ -146,7 +163,8 @@ function drawTree() {
   const levels = Math.max(...slots.map(slot => slot.level));
   const centerRadius = 72, step = 115, outer = centerRadius + levels * step;
   const side = Math.max(760, outer * 2 + 160), cx = side / 2, cy = side / 2;
-  if (!state.view || state.view.rootId !== root.id) resetView(side, root.id);
+  const generalView = generalViewFor(slots, cx, cy, centerRadius, step);
+  if (!state.view || state.view.rootId !== root.id) resetView(generalView, root.id);
   state.treeSide = side;
   const dark = document.body.classList.contains('dark');
   const palette = dark
@@ -161,7 +179,7 @@ function drawTree() {
     const inner = centerRadius + (slot.level - 1) * step + 4, outerRadius = inner + step - 8;
     const middleAngle = (start + end) / 2, mean = (inner + outerRadius) / 2, [x, y] = polar(cx, cy, mean, middleAngle);
     const arcAvailable = Math.max(2, mean * (span * Math.PI / 180) * .85);
-    const radial = slot.level > 3;
+    const radial = slot.level >= 5;
     const available = radial ? (outerRadius - inner) * .78 : arcAvailable;
     const crossAvailable = radial ? arcAvailable : (outerRadius - inner) * .78;
     const label = slot.person ? fullName(slot.person) : `Añadir ${roleName(slot.role)}`;
@@ -180,8 +198,8 @@ function drawTree() {
       if (slot.person) openEditor(slot.person); else addAncestor(slot);
     } else if (element.closest('.root-node')) openEditor(root);
   };
-  $('#resetZoom').onclick = () => { resetView(side, root.id); drawTree(); };
-  bindViewport(activate, side);
+  $('#resetZoom').onclick = () => { resetView(generalView, root.id); drawTree(); };
+  bindViewport(activate, generalView.size);
   const lastLevel = Math.max(...slots.filter(slot => slot.person).map(slot => slot.level));
   const removeButton = $('#removeOuterLevel');
   removeButton.hidden = lastLevel === 0;
@@ -251,7 +269,7 @@ function bindPersonForm(id = null, afterSave = null, isTreeRoot = false) {
       const person = await api(id ? `/api/people/${id}` : '/api/people', {method: id ? 'PUT' : 'POST', body: JSON.stringify(body)});
       if (afterSave) await afterSave(person);
       state.focusId = isTreeRoot ? person.id : state.focusId;
-      closeDialog(); toast('La persona se ha guardado'); await load(true);
+      closeDialog(); toast('La persona se ha guardado'); await load(isTreeRoot);
     } catch (error) { toast(error.message); }
   };
   $('[data-cancel]').onclick = closeDialog;
